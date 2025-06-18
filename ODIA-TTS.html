@@ -94,6 +94,16 @@
             cursor: not-allowed;
             opacity: 0.7;
         }
+        /* Highlighted download link style (conceptually, if it were possible) */
+        #downloadLink.highlight {
+            background-color: #48bb78; /* Green for highlighted */
+            cursor: pointer;
+            opacity: 1;
+        }
+        #downloadLink.highlight:hover {
+            background-color: #38a169;
+            transform: translateY(-2px);
+        }
         .message {
             margin-top: 10px;
             font-size: 0.95rem;
@@ -136,6 +146,13 @@
                 <span id="buttonText">Speak Odia</span>
                 <div id="spinner" class="spinner"></div>
             </button>
+            <!-- 
+                The downloadLink is marked as "Download Not Available" because
+                the SpeechSynthesis API does not provide a direct way to capture
+                its audio output as a downloadable file client-side.
+                To enable download, a server-side Text-to-Speech (TTS) API
+                would typically be required.
+            -->
             <a href="#" id="downloadLink">Download Not Available</a>
         </div>
         
@@ -156,10 +173,14 @@
         let odiaVoice = null;
         let voicesLoaded = false;
 
+        /**
+         * Finds an available Odia voice on the user's system.
+         * Falls back to Indian English if Odia is not found.
+         */
         function findOdiaVoice() {
             const voices = synth.getVoices();
             // Try to find an Odia voice (look for 'or', 'ori', 'oriya', or 'Odia')
-            // The exact language code might vary, so we check a few common ones.
+            // The exact language code might vary across browsers and OS, so we check a few common ones.
             odiaVoice = voices.find(voice => 
                 voice.lang === 'or-IN' || 
                 voice.lang.startsWith('or') || 
@@ -183,36 +204,43 @@
         }
 
         // Load voices when they are available or after a short delay
-        // onvoiceschanged event fires when voices are loaded, or if new voices are installed
+        // The 'onvoiceschanged' event fires when voices are loaded, or if new voices are installed.
         if (synth.onvoiceschanged !== undefined) {
             synth.onvoiceschanged = () => {
                 if (!voicesLoaded) findOdiaVoice();
             };
         }
-        // Also call findOdiaVoice immediately in case voices are already loaded on page load
+        // Also call findOdiaVoice immediately in case voices are already loaded on page load.
         if (synth.getVoices().length > 0) {
             findOdiaVoice();
         } else {
-            // Fallback for browsers that don't fire onvoiceschanged immediately or if voices are still loading
+            // Fallback for browsers that don't fire onvoiceschanged immediately 
+            // or if voices are still loading after a short delay.
             setTimeout(() => {
                 if (!voicesLoaded) findOdiaVoice();
             }, 500); 
         }
 
-
         speakButton.addEventListener('click', () => {
             const text = textArea.value.trim();
+
+            // Clear any previous download link highlighting
+            downloadLink.classList.remove('highlight');
+            downloadLink.style.cursor = 'not-allowed';
+            downloadLink.style.opacity = '0.7';
+
 
             if (!text) {
                 messageDiv.textContent = 'Please enter some text in Odia.';
                 return;
             }
 
+            // Stop any ongoing speech before starting a new one
             if (synth.speaking) {
-                synth.cancel(); // Stop any ongoing speech
+                synth.cancel(); 
             }
 
-            // Show loading spinner (briefly, as local TTS is fast)
+            // Update UI for speaking state
             buttonText.textContent = 'Speaking...';
             spinner.classList.add('show');
             speakButton.disabled = true;
@@ -228,18 +256,27 @@
                 utterance.lang = 'or-IN'; 
             }
 
-            utterance.pitch = 1; // 0 to 2
-            utterance.rate = 1;  // 0.1 to 10
+            // Set speech parameters
+            utterance.pitch = 1;  // 0 to 2
+            utterance.rate = 1;   // 0.1 to 10
             utterance.volume = 1; // 0 to 1
 
+            // Event listener for when speech finishes
             utterance.onend = () => {
+                // Reset UI after speech
                 buttonText.textContent = 'Speak Odia';
                 spinner.classList.remove('show');
                 speakButton.disabled = false;
                 messageDiv.textContent = 'Speech finished.';
+                
+                // As explained, direct recording/download is not supported.
+                // This part is for illustrative purposes if the download was possible.
+                downloadLink.textContent = 'Download Not Available'; 
             };
 
+            // Event listener for speech errors
             utterance.onerror = (event) => {
+                // Reset UI on error
                 buttonText.textContent = 'Speak Odia';
                 spinner.classList.remove('show');
                 speakButton.disabled = false;
@@ -247,6 +284,7 @@
                 console.error('SpeechSynthesisUtterance.onerror', event);
             };
             
+            // Start the speech synthesis
             synth.speak(utterance);
         });
 
