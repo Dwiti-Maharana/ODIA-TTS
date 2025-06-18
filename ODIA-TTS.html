@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Odia Text-to-Speech Converter</title>
+    <!-- Tailwind CSS CDN for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for Inter font and general layout */
+        body {
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f4f8; /* Light gray background */
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 12px; /* More rounded corners */
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); /* Deeper shadow */
+            text-align: center;
+            width: 100%;
+            max-width: 600px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        h1 {
+            color: #1a202c; /* Darker text for heading */
+            margin-bottom: 10px;
+            font-size: 2.25rem; /* Larger heading */
+            font-weight: 700; /* Bold */
+        }
+        p {
+            color: #4a5568; /* Slightly lighter text for description */
+            font-size: 1rem;
+            margin-bottom: 20px;
+        }
+        textarea {
+            width: 100%;
+            height: 180px; /* Taller textarea */
+            padding: 12px;
+            border: 1px solid #cbd5e0; /* Light border */
+            border-radius: 8px; /* Rounded corners */
+            font-size: 1.1rem;
+            resize: vertical;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            outline: none;
+        }
+        textarea:focus {
+            border-color: #63b3ed; /* Blue border on focus */
+            box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.5); /* Focus ring */
+        }
+        button {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px; /* Rounded corners */
+            cursor: pointer;
+            font-size: 1.1rem;
+            font-weight: 600;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            outline: none;
+        }
+        #speakButton {
+            background-color: #4299e1; /* Blue */
+            color: white;
+        }
+        #speakButton:hover {
+            background-color: #3182ce; /* Darker blue on hover */
+            transform: translateY(-2px);
+        }
+        #speakButton:active {
+            transform: translateY(0);
+        }
+        /* Download link is disabled as direct download from this API isn't supported */
+        #downloadLink {
+            background-color: #a0aec0; /* Gray for disabled */
+            color: white;
+            text-decoration: none; /* Remove underline from link */
+            display: inline-flex;
+            padding: 12px 25px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        .message {
+            margin-top: 10px;
+            font-size: 0.95rem;
+            color: #718096; /* Gray text */
+            min-height: 20px; /* Prevent layout shift */
+        }
+        .warning {
+            color: #dd6b20; /* Orange for warnings */
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+        /* Loading spinner */
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #fff;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: none; /* Hidden by default */
+        }
+        .spinner.show {
+            display: block;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Odia Text-to-Speech</h1>
+        <p>Type or paste your Odia text below, and hear it spoken using your device's capabilities. Note: Odia voice availability varies by device.</p>
+        
+        <textarea id="textArea" placeholder="ଆପଣଙ୍କ ଓଡ଼ିଆ ଲେଖା ଏଠାରେ ଟାଇପ୍ କରନ୍ତୁ... (Type your Odia text here...)"></textarea>
+        
+        <div class="flex flex-col sm:flex-row justify-center items-center gap-4">
+            <button id="speakButton">
+                <span id="buttonText">Speak Odia</span>
+                <div id="spinner" class="spinner"></div>
+            </button>
+            <a href="#" id="downloadLink">Download Not Available</a>
+        </div>
+        
+        <div id="message" class="message"></div>
+        <div id="warningMessage" class="message warning"></div>
+    </div>
+
+    <script>
+        const textArea = document.getElementById('textArea');
+        const speakButton = document.getElementById('speakButton');
+        const downloadLink = document.getElementById('downloadLink');
+        const messageDiv = document.getElementById('message');
+        const warningMessageDiv = document.getElementById('warningMessage');
+        const buttonText = document.getElementById('buttonText');
+        const spinner = document.getElementById('spinner');
+
+        let synth = window.speechSynthesis;
+        let odiaVoice = null;
+        let voicesLoaded = false;
+
+        function findOdiaVoice() {
+            const voices = synth.getVoices();
+            // Try to find an Odia voice (look for 'or', 'ori', 'oriya', or 'Odia')
+            // The exact language code might vary, so we check a few common ones.
+            odiaVoice = voices.find(voice => 
+                voice.lang === 'or-IN' || 
+                voice.lang.startsWith('or') || 
+                voice.name.includes('Odia') ||
+                voice.name.includes('Oriya')
+            );
+
+            if (!odiaVoice) {
+                warningMessageDiv.textContent = 'Odia voice not found on your system. Speech might default to another language (e.g., English) or a generic voice.';
+                // Optional: Fallback to a common Indian English voice if Odia is not found
+                odiaVoice = voices.find(voice => voice.lang === 'en-IN');
+                if (odiaVoice) {
+                    warningMessageDiv.textContent += ' Using Indian English voice as fallback.';
+                }
+            } else {
+                warningMessageDiv.textContent = `Using voice: ${odiaVoice.name} (${odiaVoice.lang})`;
+            }
+            voicesLoaded = true;
+            messageDiv.textContent = 'Ready to speak.';
+            speakButton.disabled = false;
+        }
+
+        // Load voices when they are available or after a short delay
+        // onvoiceschanged event fires when voices are loaded, or if new voices are installed
+        if (synth.onvoiceschanged !== undefined) {
+            synth.onvoiceschanged = () => {
+                if (!voicesLoaded) findOdiaVoice();
+            };
+        }
+        // Also call findOdiaVoice immediately in case voices are already loaded on page load
+        if (synth.getVoices().length > 0) {
+            findOdiaVoice();
+        } else {
+            // Fallback for browsers that don't fire onvoiceschanged immediately or if voices are still loading
+            setTimeout(() => {
+                if (!voicesLoaded) findOdiaVoice();
+            }, 500); 
+        }
+
+
+        speakButton.addEventListener('click', () => {
+            const text = textArea.value.trim();
+
+            if (!text) {
+                messageDiv.textContent = 'Please enter some text in Odia.';
+                return;
+            }
+
+            if (synth.speaking) {
+                synth.cancel(); // Stop any ongoing speech
+            }
+
+            // Show loading spinner (briefly, as local TTS is fast)
+            buttonText.textContent = 'Speaking...';
+            spinner.classList.add('show');
+            speakButton.disabled = true;
+            messageDiv.textContent = 'Generating speech...';
+
+            const utterance = new SpeechSynthesisUtterance(text);
+
+            if (odiaVoice) {
+                utterance.voice = odiaVoice;
+            } else {
+                // If no specific Odia voice found, try setting language directly.
+                // This might not work if the system doesn't have an appropriate engine.
+                utterance.lang = 'or-IN'; 
+            }
+
+            utterance.pitch = 1; // 0 to 2
+            utterance.rate = 1;  // 0.1 to 10
+            utterance.volume = 1; // 0 to 1
+
+            utterance.onend = () => {
+                buttonText.textContent = 'Speak Odia';
+                spinner.classList.remove('show');
+                speakButton.disabled = false;
+                messageDiv.textContent = 'Speech finished.';
+            };
+
+            utterance.onerror = (event) => {
+                buttonText.textContent = 'Speak Odia';
+                spinner.classList.remove('show');
+                speakButton.disabled = false;
+                messageDiv.textContent = `Error speaking: ${event.error}. Your system might not support Odia speech.`;
+                console.error('SpeechSynthesisUtterance.onerror', event);
+            };
+            
+            synth.speak(utterance);
+        });
+
+        // Initial state: Disable button until voices are loaded
+        speakButton.disabled = true;
+        messageDiv.textContent = 'Loading voices...';
+        // Download link remains as "Download Not Available" as it's not supported by this API.
+    </script>
+</body>
+</html>
